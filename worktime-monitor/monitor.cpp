@@ -12,6 +12,7 @@
 #include <iomanip>
 
 #define SECOND_TIMER 1000
+#define INACTIVITY_PERIOD 300.0
 
 // Global variables
 
@@ -31,6 +32,32 @@ bool oninit = true;
 bool working = false;
 std::vector<SYSTEMTIME> times_start;
 std::vector<SYSTEMTIME> times_end;
+
+double getSecondsSinceUserInput() {
+    DWORD te;
+    te = ::GetTickCount(); //number of milliseconds that have elapsed since the system was started
+    LASTINPUTINFO li;
+    li.cbSize = sizeof(LASTINPUTINFO);
+    ::GetLastInputInfo(&li); //tickcount of last user input
+    //seconds since last user input
+    return (te - li.dwTime) / 1000.0;
+}
+
+SYSTEMTIME sub(SYSTEMTIME st, double seconds) {
+    FILETIME ft;
+    SystemTimeToFileTime(&st, &ft);
+
+    ULARGE_INTEGER u;
+    memcpy(&u, &ft, sizeof(u));
+
+    const double secondsPer100nsInterval = 100. * 1.E-9;
+    u.QuadPart -= seconds / secondsPer100nsInterval;
+
+    memcpy(&ft, &u, sizeof(ft));
+
+    FileTimeToSystemTime(&ft, &st);
+    return st;
+}
 
 int CALLBACK WinMain(
     _In_ HINSTANCE hInstance,
@@ -56,11 +83,7 @@ int CALLBACK WinMain(
 
     if (!RegisterClassEx(&wcex))
     {
-        MessageBox(NULL,
-            _T("Call to RegisterClassEx failed!"),
-            _T("Windows Desktop Guided Tour"),
-            NULL);
-
+        MessageBox(NULL, _T("Call to RegisterClassEx failed!"), _T("Windows Desktop Guided Tour"), NULL);
         return 1;
     }
 
@@ -68,42 +91,28 @@ int CALLBACK WinMain(
     hInst = hInstance;
 
     // The parameters to CreateWindow explained:
-    // szWindowClass: the name of the application
-    // szTitle: the text that appears in the title bar
-    // WS_OVERLAPPEDWINDOW: the type of window to create
-    // CW_USEDEFAULT, CW_USEDEFAULT: initial position (x, y)
-    // 500, 100: initial size (width, length)
-    // NULL: the parent of this window
-    // NULL: this application does not have a menu bar
-    // hInstance: the first parameter from WinMain
-    // NULL: not used in this application
     HWND hWnd = CreateWindow(
-        szWindowClass,
-        szTitle,
-        WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT,
-        500, 400,
-        NULL,
-        NULL,
-        hInstance,
-        NULL
+        szWindowClass,                  // szWindowClass: the name of the application
+        szTitle,                        // szTitle: the text that appears in the title bar
+        WS_OVERLAPPEDWINDOW,            // WS_OVERLAPPEDWINDOW: the type of window to create
+        CW_USEDEFAULT, CW_USEDEFAULT,   // CW_USEDEFAULT, CW_USEDEFAULT: initial position (x, y)
+        500, 400,                       // 500, 100: initial size (width, length)
+        NULL,                           // NULL: the parent of this window
+        NULL,                           // NULL: this application does not have a menu bar
+        hInstance,                      // hInstance: the first parameter from WinMain
+        NULL                            // NULL: not used in this application
     );
 
     if (!hWnd)
     {
-        MessageBox(NULL,
-            _T("Call to CreateWindow failed!"),
-            _T("Windows Desktop Guided Tour"),
-            NULL);
-
+        MessageBox(NULL, _T("Call to CreateWindow failed!"), _T("Windows Desktop Guided Tour"), NULL);
         return 1;
     }
 
     // The parameters to ShowWindow explained:
     // hWnd: the value returned from CreateWindow
     // nCmdShow: the fourth parameter from WinMain
-    ShowWindow(hWnd,
-        nCmdShow);
+    ShowWindow(hWnd, nCmdShow);
     UpdateWindow(hWnd);
 
     // Main message loop:
@@ -133,33 +142,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         oninit = false;
     }
 
-    //if working==false and elapsed <= 300s:
-    //  store st as starting time
-    //  set working to true
-    //if elapsed >= 300s:
-    //  store st as ending time
-    //  set working to false
-
-    DWORD te;
-    te = ::GetTickCount(); //number of milliseconds that have elapsed since the system was started
-    LASTINPUTINFO li;
-    li.cbSize = sizeof(LASTINPUTINFO);
-    ::GetLastInputInfo(&li); //tickcount of last user input
-    //seconds since last user input
-    double elapsed = (te - li.dwTime) / 1000.0;
+    double elapsed = getSecondsSinceUserInput();
 
     if (working) {
-        if (elapsed >= 300.0) {
-            SYSTEMTIME st;
-            GetLocalTime(&st);
-            times_end.emplace_back(st);
+        if (elapsed >= INACTIVITY_PERIOD) {
+            SYSTEMTIME now;
+            GetLocalTime(&now);
+            SYSTEMTIME nowMinusInactivityPeriod = sub(now, INACTIVITY_PERIOD);
+            times_end.emplace_back(nowMinusInactivityPeriod);
             working = false;
         }
     } else {
-        if (elapsed <= 300.0) {
-            SYSTEMTIME st;
-            GetLocalTime(&st);
-            times_start.emplace_back(st);
+        if (elapsed <= INACTIVITY_PERIOD) {
+            SYSTEMTIME now;
+            GetLocalTime(&now);
+            times_start.emplace_back(now);
             working = true;
         }
     }
@@ -180,30 +177,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         hdc = BeginPaint(hWnd, &ps);
 
         // Application printouts
-        TCHAR currently[] = _T("Currently: ");
-        TCHAR working[] = _T("working");
-        TCHAR not_working[] = _T("not working");
-        std::wstringstream ss_elapsed(L"");
-        ss_elapsed << " since " << elapsed << "s";
-        TextOut(hdc, 5, 5, currently, _tcslen(currently));
-        if (working) TextOut(hdc, 100, 5, working, _tcslen(working));
-        else TextOut(hdc, 100, 5, not_working, _tcslen(currently));
-        TextOut(hdc, 200, 5, ss_elapsed.str().c_str(), _tcslen(ss_elapsed.str().c_str()));
+        TextOut(hdc, 5, 5, _T("Currently: "), _tcslen(_T("Currently: ")));
+        if (working) TextOut(hdc, 100, 5, _T("working"), _tcslen(_T("working")));
+        else TextOut(hdc, 100, 5, _T("not working"), _tcslen(_T("not working")));
 
         // Starting times
-        TCHAR start[] = _T("Start:");
-        TextOut(hdc, 5, 20, start, _tcslen(start));
+        TextOut(hdc, 5, 20, _T("Start:"), _tcslen(_T("Start:")));
         int accumulated_y = 35;
-        for (auto time : times_start) {
-            std::wstringstream ss_start(L"");
-            ss_start << std::setw(2) << std::setfill(L'0') << time.wHour << ":" << std::setw(2) << std::setfill(L'0') << time.wMinute;
-            TextOut(hdc,5, accumulated_y,ss_start.str().c_str(), _tcslen(ss_start.str().c_str()));
-            accumulated_y += 15;
+        //for (auto time : times_start) {
+        for (int i = 0; i < times_start.size(); i++) {
+            //if (time_diff(times_start.at(i), times_end.at(i)) /* || print_list_without_filtering_short_periods */) {
+                auto time = times_start.at(i);
+                std::wstringstream ss_start(L"");
+                ss_start << std::setw(2) << std::setfill(L'0') << time.wHour << ":" << std::setw(2) << std::setfill(L'0') << time.wMinute;
+                TextOut(hdc, 5, accumulated_y, ss_start.str().c_str(), _tcslen(ss_start.str().c_str()));
+                accumulated_y += 15;
+            //}
         }
         // Ending times
-        TCHAR end[] = _T("End:");
-        TextOut(hdc, 100, 20, end, _tcslen(end));
-        TCHAR greeting[] = _T("End:");
+        TextOut(hdc, 100, 20, _T("End:"), _tcslen(_T("End:")));
         accumulated_y = 35;
         for (auto time : times_end) {
             std::wstringstream ss_end(L"");
@@ -228,17 +220,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     return 0;
 }
 
-/*double getSystemIdleTime()
-{
-    int systemUptime = Environment::TickCount;
-    int idleTicks = 0;
-    LASTINPUTINFO lastInputInfo;
-    lastInputInfo.cbSize = (UInt32)Marshal::SizeOf(lastInputInfo);
-    lastInputInfo.dwTime = 0;
-    if (GetLastInputInfo(&lastInputInfo))
-    {
-        int lastInputTicks = (int)lastInputInfo.dwTime;
-        idleTicks = systemUptime - lastInputTicks;
-    }
-    return ((idleTicks > 0) ? (idleTicks / 1000) : idleTicks);
-}*/
+int time_diff(SYSTEMTIME time_start, SYSTEMTIME time_end) {
+    //time_start - time_end
+    return 1;
+}
