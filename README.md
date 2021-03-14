@@ -6,6 +6,7 @@ It uses the Windows API to retrieve information about the user activity, which i
 https://docs.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-lastinputinfo
 
 The current state of the program looks like this:
+
 ![Screenshot](doc/program.png)
 
 ## Usage
