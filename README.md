@@ -1,5 +1,8 @@
 # worktime-monitor
 
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![build](https://github.com/tofrye/worktime-monitor/actions/workflows/msbuild.yml/badge.svg)](https://github.com/tofrye/worktime-monitor/actions/workflows/msbuild.yml)
+
 This tool shall help users to track their working time automatically and without manual writing down of start and end times.
 
 It uses the Windows API to retrieve information about the user activity, which is usable from Windows 2000 and above (XP, Vista, 7, 8, 10):
