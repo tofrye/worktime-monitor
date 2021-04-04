@@ -16,7 +16,7 @@
 #include <windows.h>
 #include <Windowsx.h>
 #include <commctrl.h>
-#include <Shellapi.h>
+#include <Shellapi.h> //ShellExecute
 #include <Shlwapi.h>
 
 #define SECOND_TIMER 10000
@@ -27,7 +27,8 @@
 #define SWM_TRAYMSG	WM_APP//		the message ID sent to our window
 #define SWM_SHOW	WM_APP + 1//	show the window
 #define SWM_HIDE	WM_APP + 2//	hide the window
-#define SWM_EXIT	WM_APP + 3//	close the window
+#define SWM_FOLDER  WM_APP + 3//    show the folder of logfiles
+#define SWM_EXIT	WM_APP + 4//	close the window
 
 
 // Global variables
@@ -370,6 +371,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         case SWM_HIDE:
             ShowWindow(hWnd, SW_HIDE);
             break;
+        case SWM_FOLDER:
+            ShellExecute(NULL, NULL, NULL, NULL, L".", SW_SHOWDEFAULT); //Opens current working directory
+            break;
         case SWM_EXIT:
             DestroyWindow(hWnd);
             break;
@@ -426,6 +430,7 @@ void ShowContextMenu(HWND hWnd)
             InsertMenu(hMenu, -1, MF_BYPOSITION, SWM_HIDE, _T("Hide"));
         else
             InsertMenu(hMenu, -1, MF_BYPOSITION, SWM_SHOW, _T("Show"));
+        InsertMenu(hMenu, -1, MF_BYPOSITION, SWM_FOLDER, _T("Show Logfiles"));
         InsertMenu(hMenu, -1, MF_BYPOSITION, SWM_EXIT, _T("Exit"));
 
         SetForegroundWindow(hWnd); //necessary for PopoupMenus on Tray Icons to disappear when wanted, see: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-trackpopupmenuex
