@@ -21,6 +21,15 @@
   <ItemGroup>
     <ClCompile Include="monitor.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="resource.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="worktime-monitor.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="..\resources\icon.ico" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <ProjectGuid>{86F98906-0D2F-41A6-8465-33D64967DB60}</ProjectGuid>

@@ -12,10 +12,23 @@
 #include <vector>
 #include <iomanip> //setfill etc
 #include <cmath> //fmod
+//unsure:
+#include <windows.h>
+#include <Windowsx.h>
+#include <commctrl.h>
+#include <Shellapi.h>
+#include <Shlwapi.h>
 
 #define SECOND_TIMER 10000
-#define INACTIVITY_PERIOD 300.0
+#define INACTIVITY_PERIOD 600.0
 #define SHORT_WORK_PERIOD 120.0
+
+#define TRAYICONID	IDI_ICON1//				ID number for the Notify Icon
+#define SWM_TRAYMSG	WM_APP//		the message ID sent to our window
+#define SWM_SHOW	WM_APP + 1//	show the window
+#define SWM_HIDE	WM_APP + 2//	hide the window
+#define SWM_EXIT	WM_APP + 3//	close the window
+
 
 // Global variables
 
@@ -25,10 +38,14 @@ static TCHAR szWindowClass[] = _T("DesktopApp");
 // The string that appears in the application's title bar.
 static TCHAR szTitle[] = _T("Worktime Monitor");
 
-HINSTANCE hInst;
+HINSTANCE       hInst;  //current instance
+NOTIFYICONDATA  niData; //notify icon data
 
 // Forward declarations of functions included in this code module:
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
+ULONGLONG GetDllVersion(LPCTSTR lpszDllName);
+void ShowContextMenu(HWND hWnd);
+void CreateTrayIcon(HWND hWnd);
 
 // Own definitions
 bool oninit = true;
@@ -99,11 +116,11 @@ public:
         else TextOut(hdc, 100, 20, _T("not working"), _tcslen(_T("not working")));
 
         // Starting times
-        TextOut(hdc, 5, 35, _T("Start:"), _tcslen(_T("Start:")));
-        TextOut(hdc, 100, 35, _T("End:"), _tcslen(_T("End:")));
-        TextOut(hdc, 200, 35, _T("Duration:"), _tcslen(_T("Duration:")));
+        TextOut(hdc, 5, 50, _T("Start:   -"), _tcslen(_T("Start:   -")));
+        TextOut(hdc, 60, 50, _T("End:"), _tcslen(_T("End:")));
+        TextOut(hdc, 120, 50, _T("(Duration):"), _tcslen(_T("(Duration):")));
 
-        int accumulated_y = 50;
+        int accumulated_y = 65;
         double work_total_s = 0.0;
 
         for (int i = 0; i < times_start.size(); i++) {
@@ -120,21 +137,21 @@ public:
                 if (long_work_period /* || print_short_work_periods */) {
                     std::wstringstream ss_end(L"");
                     ss_end << std::setw(2) << std::setfill(L'0') << time_end.wHour << ":" << std::setw(2) << std::setfill(L'0') << time_end.wMinute;
-                    TextOut(hdc, 100, accumulated_y, ss_end.str().c_str(), _tcslen(ss_end.str().c_str()));
+                    TextOut(hdc, 60, accumulated_y, ss_end.str().c_str(), _tcslen(ss_end.str().c_str()));
 
                     std::wstringstream ss_period(L"");
                     double work_s = diffSystemtimes(times_start.at(i), time_end);
                     work_total_s += work_s;
                     int work_h = (int)(work_s / 3600.0);
                     int work_m = (int)(std::fmod(work_s, 3600) / 60.0);
-                    ss_period << std::setfill(L'0') << work_h << ":" << std::setw(2) << std::setfill(L'0') << work_m;
-                    TextOut(hdc, 200, accumulated_y, ss_period.str().c_str(), _tcslen(ss_period.str().c_str()));
+                    ss_period << "(" << std::setfill(L'0') << work_h << ":" << std::setw(2) << std::setfill(L'0') << work_m << "h)";
+                    TextOut(hdc, 120, accumulated_y, ss_period.str().c_str(), _tcslen(ss_period.str().c_str()));
                 }
             }
             //Starting Times
             if (long_work_period /* || print_short_work_periods */) {
                 std::wstringstream ss_start(L"");
-                ss_start << std::setw(2) << std::setfill(L'0') << time_start.wHour << ":" << std::setw(2) << std::setfill(L'0') << time_start.wMinute;
+                ss_start << std::setw(2) << std::setfill(L'0') << time_start.wHour << ":" << std::setw(2) << std::setfill(L'0') << time_start.wMinute << "  -";
                 TextOut(hdc, 5, accumulated_y, ss_start.str().c_str(), _tcslen(ss_start.str().c_str()));
                 accumulated_y += 15;
             }
@@ -150,8 +167,8 @@ public:
             work_total_s += work_s;
             int work_h = (int)(work_s / 3600.0);
             int work_m = (int)(std::fmod(work_s, 3600) / 60.0);
-            ss_period << "(" << std::setfill(L'0') << work_h << ":" << std::setw(2) << std::setfill(L'0') << work_m << ")";
-            TextOut(hdc, 200, accumulated_y-15, ss_period.str().c_str(), _tcslen(ss_period.str().c_str()));
+            ss_period << "(" << std::setfill(L'0') << work_h << ":" << std::setw(2) << std::setfill(L'0') << work_m << "h)";
+            TextOut(hdc, 120, accumulated_y-15, ss_period.str().c_str(), _tcslen(ss_period.str().c_str()));
         }
 
         TextOut(hdc, 300, 5, _T("Total Worktime: "), _tcslen(_T("Total Worktime: ")));
@@ -181,7 +198,7 @@ public:
             times_end.emplace_back(now);
         }
 
-        logfile << "Start, End -> Duration" << std::endl;
+        logfile << "Start - End, (Duration)" << std::endl;
         double work_total_s = 0.0;
 
         for (int i = 0; i < times_start.size(); i++) {
@@ -189,7 +206,7 @@ public:
             SYSTEMTIME time_end;
 
             //Starting Times
-            logfile << std::setw(2) << std::setfill('0') << time_start.wHour << ":" << std::setw(2) << std::setfill('0') << time_start.wMinute << ", ";
+            logfile << std::setw(2) << std::setfill('0') << time_start.wHour << ":" << std::setw(2) << std::setfill('0') << time_start.wMinute << " - ";
 
             //Ending Times and Duration
             if (i < times_end.size()) {
@@ -200,7 +217,7 @@ public:
                 work_total_s += work_s;
                 int work_h = (int)(work_s / 3600.0);
                 int work_m = (int)(std::fmod(work_s, 3600) / 60.0);
-                logfile << " -> " << std::setfill('0') << work_h << ":" << std::setw(2) << std::setfill('0') << work_m << std::endl;
+                logfile << " (" << std::setfill('0') << work_h << ":" << std::setw(2) << std::setfill('0') << work_m << " h)" << std::endl;
             }
         }
 
@@ -236,6 +253,8 @@ int CALLBACK WinMain(
     wcex.lpszClassName = szWindowClass;
     wcex.hIconSm = LoadIcon(wcex.hInstance, IDI_APPLICATION);
 
+    //InitCommonControls();
+
     if (!RegisterClassEx(&wcex))
     {
         MessageBox(NULL, _T("Call to RegisterClassEx failed!"), _T("Windows Desktop Guided Tour"), NULL);
@@ -245,17 +264,18 @@ int CALLBACK WinMain(
     // Store instance handle in our global variable
     hInst = hInstance;
 
+    //HWND hWnd = CreateDialog(hInstance, MAKEINTRESOURCE(1), NULL, (DLGPROC)DlgProc);
     // The parameters to CreateWindow explained:
     HWND hWnd = CreateWindow(
         szWindowClass,                  // szWindowClass: the name of the application
         szTitle,                        // szTitle: the text that appears in the title bar
         WS_OVERLAPPEDWINDOW,            // WS_OVERLAPPEDWINDOW: the type of window to create
         CW_USEDEFAULT, CW_USEDEFAULT,   // CW_USEDEFAULT, CW_USEDEFAULT: initial position (x, y)
-        500, 400,                       // 500, 100: initial size (width, length)
-        NULL,                           // NULL: the parent of this window
-        NULL,                           // NULL: this application does not have a menu bar
+        500, 300,                       // 500, 300: initial size (width, length)
+        NULL,                           // HWND: the parent of this window
+        NULL,                           // HMENU: this application does not have a menu bar
         hInstance,                      // hInstance: the first parameter from WinMain
-        NULL                            // NULL: not used in this application
+        NULL                            // LPVOID: not used in this application
     );
 
     if (!hWnd)
@@ -263,6 +283,8 @@ int CALLBACK WinMain(
         MessageBox(NULL, _T("Call to CreateWindow failed!"), _T("Windows Desktop Guided Tour"), NULL);
         return 1;
     }
+
+    CreateTrayIcon(hWnd);
 
     // The parameters to ShowWindow explained:
     // hWnd: the value returned from CreateWindow
@@ -318,11 +340,41 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
     }
 
+    int wmId, wmEvent;
+
     switch (message)
     {
-    //case WM_COMMAND/WM_INITDIALOG:
+    //case WM_INITDIALOG:
     //    SetTimer(hWnd, SECOND_TIMER, SECOND_TIMER, NULL);
     //    break;
+    case SWM_TRAYMSG: //Tray Icon Clicks
+        switch (lParam)
+        {
+        case WM_LBUTTONDBLCLK:
+            ShowWindow(hWnd, SW_RESTORE);
+            break;
+        case WM_RBUTTONDOWN:
+        case WM_CONTEXTMENU:
+            ShowContextMenu(hWnd);
+        }
+        break;
+    case WM_COMMAND: //Commands e.g. from Tray Icon selection
+        wmId = LOWORD(wParam);
+        wmEvent = HIWORD(wParam);
+
+        switch (wmId)
+        {
+        case SWM_SHOW:
+            ShowWindow(hWnd, SW_RESTORE);
+            break;
+        case SWM_HIDE:
+            ShowWindow(hWnd, SW_HIDE);
+            break;
+        case SWM_EXIT:
+            DestroyWindow(hWnd);
+            break;
+        }
+        return 1;
     case WM_TIMER:
         if (wParam == SECOND_TIMER)
         {
@@ -341,8 +393,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         EndPaint(hWnd, &ps);
     }
         break;
+    case WM_CLOSE: //X Button shall not destroy window but minimize to tray
+        ShowWindow(hWnd, SW_HIDE);
+        break;
+    case WM_ENDSESSION:
     case WM_DESTROY:
     {
+        niData.uFlags = 0;
+        Shell_NotifyIcon(NIM_DELETE, &niData);
         KillTimer(hWnd, SECOND_TIMER);
         ctimerhelper.writeToFile();
         PostQuitMessage(0);
@@ -354,4 +412,60 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     }
 
     return 0;
+}
+
+// Displays the right click context menu for the tray icon
+void ShowContextMenu(HWND hWnd)
+{
+    POINT pt;
+    GetCursorPos(&pt);
+    HMENU hMenu = CreatePopupMenu();
+    if (hMenu)
+    {
+        if (IsWindowVisible(hWnd))
+            InsertMenu(hMenu, -1, MF_BYPOSITION, SWM_HIDE, _T("Hide"));
+        else
+            InsertMenu(hMenu, -1, MF_BYPOSITION, SWM_SHOW, _T("Show"));
+        InsertMenu(hMenu, -1, MF_BYPOSITION, SWM_EXIT, _T("Exit"));
+
+        SetForegroundWindow(hWnd); //necessary for PopoupMenus on Tray Icons to disappear when wanted, see: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-trackpopupmenuex
+
+        TrackPopupMenu(hMenu, TPM_BOTTOMALIGN, pt.x, pt.y, 0, hWnd, NULL);
+        DestroyMenu(hMenu);
+    }
+}
+
+void CreateTrayIcon(HWND hWnd)
+{
+    ZeroMemory(&niData, sizeof(NOTIFYICONDATA));
+
+    niData.cbSize = NOTIFYICONDATA_V2_SIZE;
+
+    // the ID number can be anything you choose
+    niData.uID = 1;
+
+    // state which structure members are valid
+    niData.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+
+    // load Tray icon
+    niData.hIcon = LoadIcon(GetModuleHandle(0), MAKEINTRESOURCE(101));
+
+    // load Window Window Bar Icon
+    HICON hIcon = (HICON)LoadImage(hInst, MAKEINTRESOURCE(101), IMAGE_ICON, 0, 0, LR_SHARED | LR_DEFAULTSIZE);
+    SendMessage(hWnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
+    SendMessage(hWnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+
+    // the window to send messages to and the message to send
+    //		note:	the message value should be in the range of WM_APP through 0xBFFF
+    niData.hWnd = hWnd;
+    niData.uCallbackMessage = SWM_TRAYMSG;
+
+    // tooltip message for tray icon
+    lstrcpyn(niData.szTip, _T("worktime-monitor"), sizeof(niData.szTip) / sizeof(TCHAR));
+
+    Shell_NotifyIcon(NIM_ADD, &niData);
+
+    // free icon handle
+    if (niData.hIcon && DestroyIcon(niData.hIcon))
+        niData.hIcon = NULL;
 }
