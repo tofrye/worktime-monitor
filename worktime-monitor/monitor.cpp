@@ -13,13 +13,8 @@
 #include <iomanip> //setfill etc
 #include <cmath> //fmod
 #include <Shellapi.h> //ShellExecute
-//unsure:
-#include <windows.h>
-#include <Windowsx.h>
-#include <commctrl.h>
-#include <Shlwapi.h>
 
-#define SECOND_TIMER 10000
+#define TIMER_10S 10000
 #define INACTIVITY_PERIOD 600.0
 #define SHORT_WORK_PERIOD 120.0
 
@@ -362,7 +357,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
     if (oninit) {
         ctimerhelper.checkTodaysWorkingTimes();
-        SetTimer(hWnd, SECOND_TIMER, SECOND_TIMER, NULL);
+        SetTimer(hWnd, TIMER_10S, TIMER_10S, NULL);
         oninit = false;
     }
 
@@ -392,7 +387,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     switch (message)
     {
     //case WM_INITDIALOG:
-    //    SetTimer(hWnd, SECOND_TIMER, SECOND_TIMER, NULL);
+    //    SetTimer(hWnd, TIMER_10S, TIMER_10S, NULL);
     //    break;
     case SWM_TRAYMSG: //Tray Icon Clicks
         switch (lParam)
@@ -426,7 +421,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
         return 1;
     case WM_TIMER:
-        if (wParam == SECOND_TIMER)
+        if (wParam == TIMER_10S)
         {
             InvalidateRect(hWnd, NULL, TRUE);   // invalidate whole window
         }
@@ -451,7 +446,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
         niData.uFlags = 0;
         Shell_NotifyIcon(NIM_DELETE, &niData);
-        KillTimer(hWnd, SECOND_TIMER);
+        KillTimer(hWnd, TIMER_10S);
         ctimerhelper.writeToFile();
         PostQuitMessage(0);
         break;
@@ -491,27 +486,22 @@ void CreateTrayIcon(HWND hWnd)
     ZeroMemory(&niData, sizeof(NOTIFYICONDATA));
 
     niData.cbSize = NOTIFYICONDATA_V2_SIZE;
-
-    // the ID number can be anything you choose
     niData.uID = 1;
-
-    // state which structure members are valid
     niData.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
 
     // load Tray icon
     niData.hIcon = LoadIcon(GetModuleHandle(0), MAKEINTRESOURCE(101));
 
-    // load Window Window Bar Icon
+    // load Window Bar Icon
     HICON hIcon = (HICON)LoadImage(hInst, MAKEINTRESOURCE(101), IMAGE_ICON, 0, 0, LR_SHARED | LR_DEFAULTSIZE);
     SendMessage(hWnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
     SendMessage(hWnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
 
     // the window to send messages to and the message to send
-    //		note:	the message value should be in the range of WM_APP through 0xBFFF
     niData.hWnd = hWnd;
     niData.uCallbackMessage = SWM_TRAYMSG;
 
-    // tooltip message for tray icon
+    // tooltip for tray icon
     lstrcpyn(niData.szTip, _T("worktime-monitor"), sizeof(niData.szTip) / sizeof(TCHAR));
 
     Shell_NotifyIcon(NIM_ADD, &niData);
