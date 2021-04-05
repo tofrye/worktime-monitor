@@ -34,7 +34,8 @@ For convenient usage I recommend to set a link in autostart folder so the applic
 
 To add an application to autostart place the link here for your user:
 ```bash
-C:\Users\{USER}\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup```
+C:\Users\{USER}\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup
+```
 
 ## How to build
 Download MS Visual Studio 2019 and load the solution file (worktime-monitor.sln).
