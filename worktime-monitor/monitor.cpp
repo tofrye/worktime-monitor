@@ -7,16 +7,16 @@
 #include <tchar.h>
 #include <winuser.h> //GetLastInputInfo
 #include <iostream> //cout
-#include <sstream> //stringstream
+#include <sstream> //stringstream, std::getline
 #include <fstream> //filestream
 #include <vector>
 #include <iomanip> //setfill etc
 #include <cmath> //fmod
+#include <Shellapi.h> //ShellExecute
 //unsure:
 #include <windows.h>
 #include <Windowsx.h>
 #include <commctrl.h>
-#include <Shellapi.h> //ShellExecute
 #include <Shlwapi.h>
 
 #define SECOND_TIMER 10000
@@ -44,7 +44,6 @@ NOTIFYICONDATA  niData; //notify icon data
 
 // Forward declarations of functions included in this code module:
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
-ULONGLONG GetDllVersion(LPCTSTR lpszDllName);
 void ShowContextMenu(HWND hWnd);
 void CreateTrayIcon(HWND hWnd);
 
@@ -57,6 +56,55 @@ std::vector<SYSTEMTIME> times_end;
 class cTimerHelper {
 
 public:
+    std::string todayToFilename() {
+        SYSTEMTIME now;
+        GetLocalTime(&now);
+
+        //Filename
+        std::ostringstream os_year;  os_year << std::setw(2) << std::setfill('0') << now.wYear;
+        std::ostringstream os_month; os_month << std::setw(2) << std::setfill('0') << now.wMonth;
+        std::ostringstream os_day;   os_day << std::setw(2) << std::setfill('0') << now.wDay;
+        return std::string("worktime-log_") + os_year.str() + std::string("-") + os_month.str() + "-" + os_day.str() + std::string(".txt");
+    }
+
+    SYSTEMTIME stringToSystemtime(std::string input) {
+        //expects input of type hh:mm
+        std::string hours = input.substr(0, input.find(":"));
+        int h = std::stoi(hours);
+        std::string minutes = input.substr(input.find(":") + 1);
+        int m = std::stoi(minutes);
+
+        SYSTEMTIME output;
+        GetLocalTime(&output);
+        output.wHour = h;
+        output.wMinute = m;
+
+        return output;
+    }
+
+    void checkTodaysWorkingTimes() {
+        std::string filename = todayToFilename();
+        std::ifstream logfile;
+        logfile.open(filename, std::ios_base::in);
+        if (!logfile) {
+            return;
+        } else {
+            std::string line;
+            while (std::getline(logfile, line)) {
+                if (line.rfind("Start", 0) == 0) {
+                    continue;
+                } else if (line.rfind("->", 0) == 0) {
+                    continue;
+                } else {
+                    std::string time1 = line.substr(0, 5); //start: hh:mm
+                    std::string time2 = line.substr(line.find("- ")+2, 5); //end: hh:mm
+                    times_start.emplace_back(stringToSystemtime(time1));
+                    times_end.emplace_back(stringToSystemtime(time2));
+                }
+            }
+        }
+    }
+
     double getSecondsSinceUserInput() {
         DWORD te;
         te = ::GetTickCount(); //number of milliseconds that have elapsed since the system was started
@@ -183,17 +231,12 @@ public:
     }
 
     bool writeToFile() {
+        std::string filename = todayToFilename();
+        std::ofstream logfile;
+        logfile.open(filename, std::ios_base::out); //app for append
+
         SYSTEMTIME now;
         GetLocalTime(&now);
-
-        //Filename
-        std::ofstream logfile;
-        std::ostringstream os_year;  os_year << std::setw(2) << std::setfill('0') << now.wYear;
-        std::ostringstream os_month; os_month << std::setw(2) << std::setfill('0') << now.wMonth;
-        std::ostringstream os_day;   os_day << std::setw(2) << std::setfill('0') << now.wDay;
-        std::string filename = std::string("worktime-log_") + os_year.str() + std::string("-") + os_month.str() + "-" + os_day.str() + std::string(".txt");
-        logfile.open(filename, std::ios_base::app);
-
         //Insert ending time if none given
         if (times_end.size() < times_start.size()) {
             times_end.emplace_back(now);
@@ -315,12 +358,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     PAINTSTRUCT ps;
     HDC hdc;
 
+    cTimerHelper ctimerhelper;
+
     if (oninit) {
+        ctimerhelper.checkTodaysWorkingTimes();
         SetTimer(hWnd, SECOND_TIMER, SECOND_TIMER, NULL);
         oninit = false;
     }
 
-    cTimerHelper ctimerhelper;
+    
 
     double elapsed = ctimerhelper.getSecondsSinceUserInput();
 
